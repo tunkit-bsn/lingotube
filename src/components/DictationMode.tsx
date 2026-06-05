@@ -6,6 +6,7 @@ interface Props {
   isLooping: boolean
   onToggleLoop: () => void
   onReplay: () => void
+  onComplete: () => void
 }
 
 interface WordState {
@@ -22,7 +23,7 @@ function normalize(s: string) {
   return s.toLowerCase().replace(/[^a-z']/g, '')
 }
 
-export function DictationMode({ text, isLooping, onToggleLoop, onReplay }: Props) {
+export function DictationMode({ text, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
   const [words, setWords] = useState<WordState[]>([])
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
@@ -34,6 +35,12 @@ export function DictationMode({ text, isLooping, onToggleLoop, onReplay }: Props
     setTimeout(() => inputRefs.current[0]?.focus(), 50)
   }, [text])
 
+  function checkComplete(updated: WordState[]) {
+    const alphaWords = updated.filter(w => /[a-zA-Z']/.test(w.word))
+    const allDone = alphaWords.every(w => w.status !== 'idle')
+    if (allDone) setTimeout(onComplete, 600)
+  }
+
   function handleChange(i: number, value: string) {
     const isAlpha = /[a-zA-Z']/.test(words[i].word)
     if (!isAlpha) return
@@ -44,11 +51,11 @@ export function DictationMode({ text, isLooping, onToggleLoop, onReplay }: Props
       return next
     })
 
-    // check correctness when value matches word length
     if (normalize(value) === normalize(words[i].word)) {
       setWords(prev => {
         const next = [...prev]
         next[i] = { ...next[i], value, status: 'correct' }
+        checkComplete(next)
         return next
       })
       focusNext(i)
@@ -79,6 +86,7 @@ export function DictationMode({ text, isLooping, onToggleLoop, onReplay }: Props
     setWords(prev => {
       const next = [...prev]
       next[i] = { ...next[i], value: next[i].word, status: 'revealed' }
+      checkComplete(next)
       return next
     })
     focusNext(i)

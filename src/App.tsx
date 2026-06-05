@@ -288,6 +288,18 @@ function App() {
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}
+                      onComplete={() => {
+                        const idx = currentIndexRef.current
+                        const lines = transcriptRef.current
+                        if (idx < 0 || idx >= lines.length) return
+                        // phát lại câu hiện tại
+                        seekToLine(idx)
+                        // sau duration của câu thì nhảy tiếp
+                        const duration = lines[idx].duration
+                        setTimeout(() => {
+                          if (idx + 1 < lines.length) seekToLine(idx + 1)
+                        }, duration + 300)
+                      }}
                     />
                   </div>
                 ) : current ? (
