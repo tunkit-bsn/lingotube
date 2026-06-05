@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PenLine } from 'lucide-react'
+import { PenLine, Shuffle } from 'lucide-react'
 import { RubyText } from '@/components/RubyText'
 import { DictationMode } from '@/components/DictationMode'
+import { WordOrder } from '@/components/WordOrder'
 
 const API = 'http://localhost:3000'
 
@@ -31,6 +32,7 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [isLooping, setIsLooping] = useState(false)
   const [isDictation, setIsDictation] = useState(false)
+  const [isWordOrder, setIsWordOrder] = useState(false)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -39,11 +41,13 @@ function App() {
   const currentIndexRef = useRef(-1)
   const isLoopingRef = useRef(false)
   const isDictationRef = useRef(false)
+  const isWordOrderRef = useRef(false)
 
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
   useEffect(() => { isDictationRef.current = isDictation }, [isDictation])
+  useEffect(() => { isWordOrderRef.current = isWordOrder }, [isWordOrder])
 
   async function handleLoad() {
     const id = extractVideoId(inputUrl.trim())
@@ -91,7 +95,7 @@ function App() {
     const t = playerRef.current.getCurrentTime() * 1000
     let targetMs = t + deltaSeconds * 1000
 
-    if (isDictationRef.current && idx >= 0) {
+    if ((isDictationRef.current || isWordOrderRef.current) && idx >= 0) {
       const line = lines[idx]
       const start = line.offset
       const end = line.offset + line.duration - 50
@@ -121,7 +125,7 @@ function App() {
         return
       }
 
-      if (isDictationRef.current && idx >= 0) {
+      if ((isDictationRef.current || isWordOrderRef.current) && idx >= 0) {
         const line = lines[idx]
         const end = line.offset + line.duration
         if (time >= end) {
@@ -156,7 +160,7 @@ function App() {
 
     const idx = currentIndexRef.current
     const lines = transcriptRef.current
-    const dictation = isDictationRef.current
+    const dictation = isDictationRef.current || isWordOrderRef.current
 
     switch (e.key) {
       case 'ArrowUp':
@@ -222,6 +226,7 @@ function App() {
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
   const isChinese = selectedLang.startsWith('zh')
   const canDictate = !isChinese && !!current
+  const activeMode = isDictation ? 'dictation' : isWordOrder ? 'wordorder' : null
 
   const keyHints = isDictation
     ? [
@@ -288,21 +293,29 @@ function App() {
 
             {/* Current subtitle / Dictation */}
             <div className="border rounded-lg p-4 bg-card flex flex-col gap-3 min-h-[120px] justify-center relative">
-              {isLooping && !isDictation && (
+              {isLooping && !activeMode && (
                 <span className="absolute top-2 right-3 text-xs text-primary font-medium">⟳ Lặp lại</span>
               )}
 
-              {/* Toggle dictation button */}
               {canDictate && (
                 <div className="absolute top-2 left-3 flex items-center gap-2">
                   <Button
                     size="sm"
                     variant={isDictation ? 'default' : 'outline'}
                     className="h-8 text-xs px-3 gap-1.5"
-                    onClick={() => setIsDictation(p => !p)}
+                    onClick={() => { setIsDictation(p => !p); setIsWordOrder(false) }}
                   >
                     <PenLine size={13} />
                     Chép chính tả
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isWordOrder ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsWordOrder(p => !p); setIsDictation(false) }}
+                  >
+                    <Shuffle size={13} />
+                    Sắp xếp từ
                   </Button>
                 </div>
               )}
@@ -311,6 +324,24 @@ function App() {
                 {isDictation && current ? (
                   <div data-dictation>
                     <DictationMode
+                      text={current.text}
+                      isLooping={isLooping}
+                      onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
+                      onReplay={() => seekToLine(currentIndexRef.current)}
+                      onComplete={() => {
+                        const idx = currentIndexRef.current
+                        const lines = transcriptRef.current
+                        if (idx < 0 || idx >= lines.length) return
+                        seekToLine(idx)
+                        setTimeout(() => {
+                          if (idx + 1 < lines.length) seekToLine(idx + 1)
+                        }, lines[idx].duration + 300)
+                      }}
+                    />
+                  </div>
+                ) : isWordOrder && current ? (
+                  <div data-dictation>
+                    <WordOrder
                       text={current.text}
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
