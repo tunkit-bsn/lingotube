@@ -315,7 +315,15 @@ function App() {
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}
-                      onComplete={() => {}}
+                      onComplete={() => {
+                        const idx = currentIndexRef.current
+                        const lines = transcriptRef.current
+                        if (idx < 0 || idx >= lines.length) return
+                        seekToLine(idx)
+                        setTimeout(() => {
+                          if (idx + 1 < lines.length) seekToLine(idx + 1)
+                        }, lines[idx].duration + 300)
+                      }}
                     />
                   </div>
                 ) : current ? (
