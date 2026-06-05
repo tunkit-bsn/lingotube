@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { RubyText } from '@/components/RubyText'
 
 const API = 'http://localhost:3000'
 
@@ -150,6 +151,7 @@ function App() {
   useEffect(() => () => stopSync(), [])
 
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
+  const isChinese = selectedLang.startsWith('zh')
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -207,7 +209,9 @@ function App() {
               )}
               {current ? (
                 <>
-                  <p className="text-lg font-medium">{current.text}</p>
+                  <p className="text-lg font-medium">
+                    {isChinese ? <RubyText text={current.text} /> : current.text}
+                  </p>
                   <Separator />
                   <p className="text-muted-foreground">{current.translated}</p>
                 </>
@@ -267,7 +271,9 @@ function App() {
                       {Math.floor(line.offset / 60000)}:{String(Math.floor((line.offset % 60000) / 1000)).padStart(2, '0')}
                     </span>
                     <div className="flex flex-col gap-0.5">
-                      <p className="text-sm">{line.text}</p>
+                      <p className="text-sm">
+                        {isChinese ? <RubyText text={line.text} /> : line.text}
+                      </p>
                       {line.translated && <p className="text-xs text-muted-foreground">{line.translated}</p>}
                     </div>
                   </div>
