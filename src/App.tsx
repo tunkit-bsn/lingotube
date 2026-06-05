@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PenLine } from 'lucide-react'
 import { RubyText } from '@/components/RubyText'
 import { DictationMode } from '@/components/DictationMode'
 
@@ -30,7 +31,6 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [isLooping, setIsLooping] = useState(false)
   const [isDictation, setIsDictation] = useState(false)
-  const [autoPlay, setAutoPlay] = useState(false)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -39,13 +39,11 @@ function App() {
   const currentIndexRef = useRef(-1)
   const isLoopingRef = useRef(false)
   const isDictationRef = useRef(false)
-  const autoPlayRef = useRef(false)
 
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
   useEffect(() => { isDictationRef.current = isDictation }, [isDictation])
-  useEffect(() => { autoPlayRef.current = autoPlay }, [autoPlay])
 
   async function handleLoad() {
     const id = extractVideoId(inputUrl.trim())
@@ -299,23 +297,13 @@ function App() {
                 <div className="absolute top-2 left-3 flex items-center gap-2">
                   <Button
                     size="sm"
-                    variant={isDictation ? 'default' : 'ghost'}
-                    className="h-6 text-xs px-2"
+                    variant={isDictation ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
                     onClick={() => setIsDictation(p => !p)}
                   >
-                    ✎ Chép chính tả
+                    <PenLine size={13} />
+                    Chép chính tả
                   </Button>
-                  {isDictation && (
-                    <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={autoPlay}
-                        onChange={e => setAutoPlay(e.target.checked)}
-                        className="w-3 h-3"
-                      />
-                      Tự động tiếp
-                    </label>
-                  )}
                 </div>
               )}
 
@@ -327,14 +315,7 @@ function App() {
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}
-                      onComplete={() => {
-                        const idx = currentIndexRef.current
-                        const lines = transcriptRef.current
-                        if (idx < 0 || idx >= lines.length) return
-                        if (autoPlayRef.current && idx + 1 < lines.length) {
-                          seekToLine(idx + 1)
-                        }
-                      }}
+                      onComplete={() => {}}
                     />
                   </div>
                 ) : current ? (
