@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RubyText } from '@/components/RubyText'
+import { DictationMode } from '@/components/DictationMode'
 
 const API = 'http://localhost:3000'
 
@@ -28,6 +29,7 @@ function App() {
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [isLooping, setIsLooping] = useState(false)
+  const [isDictation, setIsDictation] = useState(false)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -35,11 +37,12 @@ function App() {
   const transcriptRef = useRef<TranscriptLine[]>([])
   const currentIndexRef = useRef(-1)
   const isLoopingRef = useRef(false)
+  const isDictationRef = useRef(false)
 
-  // Keep refs in sync
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
+  useEffect(() => { isDictationRef.current = isDictation }, [isDictation])
 
   async function handleLoad() {
     const id = extractVideoId(inputUrl.trim())
@@ -51,6 +54,7 @@ function App() {
     setSelectedLang('')
     setCurrentIndex(-1)
     setIsLooping(false)
+    setIsDictation(false)
 
     const res = await fetch(`${API}/languages/${id}`)
     const json = await res.json() as { data: Language[] }
@@ -79,6 +83,12 @@ function App() {
     setCurrentIndex(index)
   }
 
+  function seekRelative(deltaSeconds: number) {
+    if (!playerRef.current) return
+    const t = playerRef.current.getCurrentTime() as number
+    playerRef.current.seekTo(t + deltaSeconds, true)
+  }
+
   function startSync() {
     if (intervalRef.current) clearInterval(intervalRef.current)
     intervalRef.current = setInterval(async () => {
@@ -95,7 +105,6 @@ function App() {
           playerRef.current.playVideo()
           return
         }
-        // không cập nhật currentIndex khi đang loop
         return
       }
 
@@ -108,20 +117,50 @@ function App() {
     if (intervalRef.current) clearInterval(intervalRef.current)
   }
 
-  // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA'
+
+    // arrow keys: work everywhere except when typing in URL input (not dictation inputs)
+    const isUrlInput = isInput && !(e.target as HTMLElement).closest('[data-dictation]')
 
     const idx = currentIndexRef.current
     const lines = transcriptRef.current
+    const dictation = isDictationRef.current
+
+    switch (e.key) {
+      case 'ArrowUp':
+        if (isUrlInput) return
+        e.preventDefault()
+        seekRelative(-2)
+        break
+      case 'ArrowDown':
+        if (isUrlInput) return
+        e.preventDefault()
+        seekRelative(2)
+        break
+      case 'ArrowLeft':
+        if (isInput) return
+        e.preventDefault()
+        if (idx > 0) seekToLine(idx - 1)
+        break
+      case 'ArrowRight':
+        if (isInput) return
+        e.preventDefault()
+        if (idx < lines.length - 1) seekToLine(idx + 1)
+        break
+    }
+
+    if (isInput) return
 
     switch (e.key.toLowerCase()) {
       case 'a':
+        if (dictation) return
         e.preventDefault()
         if (idx > 0) seekToLine(idx - 1)
         break
       case 'd':
+        if (dictation) return
         e.preventDefault()
         if (idx < lines.length - 1) seekToLine(idx + 1)
         break
@@ -152,6 +191,25 @@ function App() {
 
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
   const isChinese = selectedLang.startsWith('zh')
+  const canDictate = !isChinese && !!current
+
+  const keyHints = isDictation
+    ? [
+        { key: '↑', label: 'Tua lại 2s' },
+        { key: '↓', label: 'Tua tới 2s' },
+        { key: '←', label: 'Câu trước' },
+        { key: '→', label: 'Câu sau' },
+        { key: 'R', label: 'Phát lại' },
+        { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
+      ]
+    : [
+        { key: 'A / ←', label: 'Câu trước' },
+        { key: 'D / →', label: 'Câu sau' },
+        { key: '↑', label: 'Tua lại 2s' },
+        { key: '↓', label: 'Tua tới 2s' },
+        { key: 'R', label: 'Phát lại' },
+        { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
+      ]
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -202,32 +260,53 @@ function App() {
               )}
             </div>
 
-            {/* Current subtitle */}
-            <div className="border rounded-lg p-4 bg-card flex flex-col gap-2 min-h-[100px] items-center justify-center text-center relative">
-              {isLooping && (
+            {/* Current subtitle / Dictation */}
+            <div className="border rounded-lg p-4 bg-card flex flex-col gap-3 min-h-[120px] justify-center relative">
+              {isLooping && !isDictation && (
                 <span className="absolute top-2 right-3 text-xs text-primary font-medium">⟳ Lặp lại</span>
               )}
-              {current ? (
-                <>
-                  <p className="text-lg font-medium">
-                    {isChinese ? <RubyText text={current.text} /> : current.text}
-                  </p>
-                  <Separator />
-                  <p className="text-muted-foreground">{current.translated}</p>
-                </>
-              ) : (
-                <p className="text-muted-foreground text-sm">Phụ đề sẽ hiển thị ở đây</p>
+
+              {/* Toggle dictation button */}
+              {canDictate && (
+                <div className="absolute top-2 left-3">
+                  <Button
+                    size="sm"
+                    variant={isDictation ? 'default' : 'ghost'}
+                    className="h-6 text-xs px-2"
+                    onClick={() => setIsDictation(p => !p)}
+                  >
+                    {isDictation ? '✎ Chép chính tả' : '✎ Chép chính tả'}
+                  </Button>
+                </div>
               )}
+
+              <div className={canDictate ? 'mt-6' : ''}>
+                {isDictation && current ? (
+                  <div data-dictation>
+                    <DictationMode
+                      text={current.text}
+                      isLooping={isLooping}
+                      onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
+                      onReplay={() => seekToLine(currentIndexRef.current)}
+                    />
+                  </div>
+                ) : current ? (
+                  <div className="flex flex-col gap-2 items-center text-center">
+                    <p className="text-lg font-medium">
+                      {isChinese ? <RubyText text={current.text} /> : current.text}
+                    </p>
+                    <Separator />
+                    <p className="text-muted-foreground">{current.translated}</p>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm text-center">Phụ đề sẽ hiển thị ở đây</p>
+                )}
+              </div>
             </div>
 
             {/* Keyboard hints */}
             <div className="flex gap-3 justify-center flex-wrap">
-              {[
-                { key: 'A', label: 'Câu trước' },
-                { key: 'D', label: 'Câu sau' },
-                { key: 'R', label: 'Phát lại' },
-                { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
-              ].map(({ key, label, active }) => (
+              {keyHints.map(({ key, label, active }) => (
                 <div key={key} className={`flex items-center gap-1.5 text-xs ${active ? 'text-primary' : 'text-muted-foreground'}`}>
                   <kbd className={`px-1.5 py-0.5 rounded border font-mono text-xs ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted'}`}>{key}</kbd>
                   <span>{label}</span>
