@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import YouTube, { type YouTubePlayer } from 'react-youtube'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,10 +26,19 @@ function App() {
   const [selectedLang, setSelectedLang] = useState<string>('')
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
   const [currentIndex, setCurrentIndex] = useState(-1)
+  const [isLooping, setIsLooping] = useState(false)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const transcriptRef = useRef<TranscriptLine[]>([])
+  const currentIndexRef = useRef(-1)
+  const isLoopingRef = useRef(false)
+
+  // Keep refs in sync
+  useEffect(() => { transcriptRef.current = transcript }, [transcript])
+  useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
+  useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
 
   async function handleLoad() {
     const id = extractVideoId(inputUrl.trim())
@@ -40,6 +49,7 @@ function App() {
     setLanguages([])
     setSelectedLang('')
     setCurrentIndex(-1)
+    setIsLooping(false)
 
     const res = await fetch(`${API}/languages/${id}`)
     const json = await res.json() as { data: Language[] }
@@ -60,19 +70,72 @@ function App() {
     if (selectedLang && videoId) handleLangChange(selectedLang)
   }, [selectedLang])
 
+  function seekToLine(index: number) {
+    const lines = transcriptRef.current
+    if (index < 0 || index >= lines.length) return
+    playerRef.current?.seekTo(lines[index].offset / 1000, true)
+    playerRef.current?.playVideo()
+    setCurrentIndex(index)
+  }
+
   function startSync() {
     if (intervalRef.current) clearInterval(intervalRef.current)
     intervalRef.current = setInterval(async () => {
       if (!playerRef.current) return
       const time = (await playerRef.current.getCurrentTime()) * 1000
-      const idx = transcript.findLastIndex(l => l.offset <= time)
-      if (idx !== currentIndex) setCurrentIndex(idx)
-    }, 300)
+      const lines = transcriptRef.current
+      const idx = lines.findLastIndex(l => l.offset <= time)
+
+      // Loop mode: khi hết dòng hiện tại thì seek lại đầu dòng
+      if (isLoopingRef.current && currentIndexRef.current >= 0) {
+        const current = lines[currentIndexRef.current]
+        const end = current.offset + current.duration
+        if (time >= end) {
+          playerRef.current.seekTo(current.offset / 1000, true)
+          return
+        }
+      }
+
+      if (idx !== currentIndexRef.current) setCurrentIndex(idx)
+    }, 200)
   }
 
   function stopSync() {
     if (intervalRef.current) clearInterval(intervalRef.current)
   }
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+    const idx = currentIndexRef.current
+    const lines = transcriptRef.current
+
+    switch (e.key.toLowerCase()) {
+      case 'a':
+        e.preventDefault()
+        if (idx > 0) seekToLine(idx - 1)
+        break
+      case 'd':
+        e.preventDefault()
+        if (idx < lines.length - 1) seekToLine(idx + 1)
+        break
+      case 'r':
+        e.preventDefault()
+        if (idx >= 0) seekToLine(idx)
+        break
+      case 's':
+        e.preventDefault()
+        setIsLooping(prev => !prev)
+        break
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   useEffect(() => {
     if (currentIndex >= 0) {
@@ -134,7 +197,10 @@ function App() {
             </div>
 
             {/* Current subtitle */}
-            <div className="border rounded-lg p-4 bg-card flex flex-col gap-2 min-h-[100px] items-center justify-center text-center">
+            <div className="border rounded-lg p-4 bg-card flex flex-col gap-2 min-h-[100px] items-center justify-center text-center relative">
+              {isLooping && (
+                <span className="absolute top-2 right-3 text-xs text-primary font-medium">⟳ Lặp lại</span>
+              )}
               {current ? (
                 <>
                   <p className="text-lg font-medium">{current.text}</p>
@@ -144,6 +210,21 @@ function App() {
               ) : (
                 <p className="text-muted-foreground text-sm">Phụ đề sẽ hiển thị ở đây</p>
               )}
+            </div>
+
+            {/* Keyboard hints */}
+            <div className="flex gap-3 justify-center flex-wrap">
+              {[
+                { key: 'A', label: 'Câu trước' },
+                { key: 'D', label: 'Câu sau' },
+                { key: 'R', label: 'Phát lại' },
+                { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
+              ].map(({ key, label, active }) => (
+                <div key={key} className={`flex items-center gap-1.5 text-xs ${active ? 'text-primary' : 'text-muted-foreground'}`}>
+                  <kbd className={`px-1.5 py-0.5 rounded border font-mono text-xs ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted'}`}>{key}</kbd>
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -174,15 +255,17 @@ function App() {
                 <div
                   key={i}
                   ref={el => { subtitleRefs.current[i] = el }}
-                  onClick={() => playerRef.current?.seekTo(line.offset / 1000, true)}
+                  onClick={() => seekToLine(i)}
                   className={`px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors ${i === currentIndex ? 'bg-primary/10 border-l-2 border-l-primary' : ''}`}
                 >
                   <div className="flex items-start gap-3">
                     <span className="text-xs text-muted-foreground mt-0.5 shrink-0">
                       {Math.floor(line.offset / 60000)}:{String(Math.floor((line.offset % 60000) / 1000)).padStart(2, '0')}
                     </span>
-                    <p className="text-sm">{line.text}</p>
-                    {line.translated && <p className="text-xs text-muted-foreground">{line.translated}</p>}
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm">{line.text}</p>
+                      {line.translated && <p className="text-xs text-muted-foreground">{line.translated}</p>}
+                    </div>
                   </div>
                 </div>
               ))}
