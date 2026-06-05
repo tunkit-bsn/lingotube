@@ -88,8 +88,20 @@ function App() {
 
   function seekRelative(deltaSeconds: number) {
     if (!playerRef.current) return
-    const t = playerRef.current.getCurrentTime() as number
-    playerRef.current.seekTo(t + deltaSeconds, true)
+    const idx = currentIndexRef.current
+    const lines = transcriptRef.current
+    const t = playerRef.current.getCurrentTime() * 1000
+    let targetMs = t + deltaSeconds * 1000
+
+    if (isDictationRef.current && idx >= 0) {
+      const line = lines[idx]
+      const start = line.offset
+      const end = line.offset + line.duration - 50
+      targetMs = Math.min(Math.max(targetMs, start), end)
+    }
+
+    playerRef.current.seekTo(targetMs / 1000, true)
+    playerRef.current.playVideo()
   }
 
   function startSync() {
@@ -160,12 +172,12 @@ function App() {
         seekRelative(2)
         break
       case 'ArrowLeft':
-        if (isInput) return
+        if (isUrlInput) return
         e.preventDefault()
         if (idx > 0) seekToLine(idx - 1)
         break
       case 'ArrowRight':
-        if (isInput) return
+        if (isUrlInput) return
         e.preventDefault()
         if (idx < lines.length - 1) seekToLine(idx + 1)
         break

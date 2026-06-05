@@ -68,10 +68,7 @@ export function DictationMode({ text, isLooping, onToggleLoop, onReplay, onCompl
       revealWord(i)
       return
     }
-    // block arrow keys from bubbling to global shortcuts
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-      e.stopPropagation()
-    }
+
     if (e.key === 'Enter') {
       e.preventDefault()
       focusNext(i)
