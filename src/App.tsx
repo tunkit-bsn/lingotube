@@ -30,6 +30,7 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [isLooping, setIsLooping] = useState(false)
   const [isDictation, setIsDictation] = useState(false)
+  const [autoPlay, setAutoPlay] = useState(false)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -38,11 +39,13 @@ function App() {
   const currentIndexRef = useRef(-1)
   const isLoopingRef = useRef(false)
   const isDictationRef = useRef(false)
+  const autoPlayRef = useRef(false)
 
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
   useEffect(() => { isDictationRef.current = isDictation }, [isDictation])
+  useEffect(() => { autoPlayRef.current = autoPlay }, [autoPlay])
 
   async function handleLoad() {
     const id = extractVideoId(inputUrl.trim())
@@ -108,6 +111,15 @@ function App() {
         return
       }
 
+      if (isDictationRef.current && idx >= 0) {
+        const line = lines[idx]
+        const end = line.offset + line.duration
+        if (time >= end) {
+          playerRef.current.pauseVideo()
+          return
+        }
+      }
+
       const newIdx = lines.findLastIndex(l => l.offset <= time)
       if (newIdx !== idx) setCurrentIndex(newIdx)
     }, 200)
@@ -120,6 +132,14 @@ function App() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName
     const isInput = tag === 'INPUT' || tag === 'TEXTAREA'
+
+    // Alt+R: replay current subtitle from anywhere (including input fields)
+    if (e.altKey && e.key.toLowerCase() === 'r') {
+      e.preventDefault()
+      const idx = currentIndexRef.current
+      if (idx >= 0) seekToLine(idx)
+      return
+    }
 
     // arrow keys: work everywhere except when typing in URL input (not dictation inputs)
     const isUrlInput = isInput && !(e.target as HTMLElement).closest('[data-dictation]')
@@ -195,21 +215,21 @@ function App() {
 
   const keyHints = isDictation
     ? [
-        { key: '↑', label: 'Tua lại 2s' },
-        { key: '↓', label: 'Tua tới 2s' },
-        { key: '←', label: 'Câu trước' },
-        { key: '→', label: 'Câu sau' },
-        { key: 'R', label: 'Phát lại' },
-        { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
-      ]
+      { key: '↑', label: 'Tua lại 2s' },
+      { key: '↓', label: 'Tua tới 2s' },
+      { key: '←', label: 'Câu trước' },
+      { key: '→', label: 'Câu sau' },
+      { key: 'Alt+R', label: 'Phát lại' },
+      { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
+    ]
     : [
-        { key: 'A / ←', label: 'Câu trước' },
-        { key: 'D / →', label: 'Câu sau' },
-        { key: '↑', label: 'Tua lại 2s' },
-        { key: '↓', label: 'Tua tới 2s' },
-        { key: 'R', label: 'Phát lại' },
-        { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
-      ]
+      { key: 'A / ←', label: 'Câu trước' },
+      { key: 'D / →', label: 'Câu sau' },
+      { key: '↑', label: 'Tua lại 2s' },
+      { key: '↓', label: 'Tua tới 2s' },
+      { key: 'R / Alt+R', label: 'Phát lại' },
+      { key: 'S', label: isLooping ? 'Tắt lặp' : 'Lặp lại', active: isLooping },
+    ]
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -217,10 +237,6 @@ function App() {
         <div className="flex items-center gap-2">
           <span className="text-xl font-bold">LinguaTube</span>
           <Badge variant="secondary">Beta</Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge>Tiếng Anh</Badge>
-          <Badge variant="outline">Tiếng Trung</Badge>
         </div>
       </header>
 
@@ -268,15 +284,26 @@ function App() {
 
               {/* Toggle dictation button */}
               {canDictate && (
-                <div className="absolute top-2 left-3">
+                <div className="absolute top-2 left-3 flex items-center gap-2">
                   <Button
                     size="sm"
                     variant={isDictation ? 'default' : 'ghost'}
                     className="h-6 text-xs px-2"
                     onClick={() => setIsDictation(p => !p)}
                   >
-                    {isDictation ? '✎ Chép chính tả' : '✎ Chép chính tả'}
+                    ✎ Chép chính tả
                   </Button>
+                  {isDictation && (
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoPlay}
+                        onChange={e => setAutoPlay(e.target.checked)}
+                        className="w-3 h-3"
+                      />
+                      Tự động tiếp
+                    </label>
+                  )}
                 </div>
               )}
 
@@ -292,13 +319,9 @@ function App() {
                         const idx = currentIndexRef.current
                         const lines = transcriptRef.current
                         if (idx < 0 || idx >= lines.length) return
-                        // phát lại câu hiện tại
-                        seekToLine(idx)
-                        // sau duration của câu thì nhảy tiếp
-                        const duration = lines[idx].duration
-                        setTimeout(() => {
-                          if (idx + 1 < lines.length) seekToLine(idx + 1)
-                        }, duration + 300)
+                        if (autoPlayRef.current && idx + 1 < lines.length) {
+                          seekToLine(idx + 1)
+                        }
                       }}
                     />
                   </div>
