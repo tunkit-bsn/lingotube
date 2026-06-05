@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const API = 'http://localhost:3000'
 
 interface Language { code: string; name: string }
-interface TranscriptLine { text: string; duration: number; offset: number }
+interface TranscriptLine { text: string; translated: string; duration: number; offset: number }
 
 function extractVideoId(url: string): string | null {
   const patterns = [/[?&]v=([^&]+)/, /youtu\.be\/([^?&]+)/, /youtube\.com\/embed\/([^?&]+)/]
@@ -50,7 +50,7 @@ function App() {
   async function handleLangChange(lang: string) {
     setSelectedLang(lang)
     if (!videoId) return
-    const res = await fetch(`${API}/transcript/${videoId}?lang=${lang}`)
+    const res = await fetch(`${API}/transcript/${videoId}?lang=${lang}&translate_to=vi`)
     const json = await res.json() as { data: TranscriptLine[] }
     setTranscript(json.data)
     setCurrentIndex(-1)
@@ -139,7 +139,7 @@ function App() {
                 <>
                   <p className="text-lg font-medium">{current.text}</p>
                   <Separator />
-                  <p className="text-muted-foreground text-sm italic">Bản dịch sẽ hiển thị ở đây</p>
+                  <p className="text-muted-foreground">{current.translated}</p>
                 </>
               ) : (
                 <p className="text-muted-foreground text-sm">Phụ đề sẽ hiển thị ở đây</p>
@@ -182,6 +182,7 @@ function App() {
                       {Math.floor(line.offset / 60000)}:{String(Math.floor((line.offset % 60000) / 1000)).padStart(2, '0')}
                     </span>
                     <p className="text-sm">{line.text}</p>
+                    {line.translated && <p className="text-xs text-muted-foreground">{line.translated}</p>}
                   </div>
                 </div>
               ))}
