@@ -84,19 +84,22 @@ function App() {
       if (!playerRef.current) return
       const time = (await playerRef.current.getCurrentTime()) * 1000
       const lines = transcriptRef.current
-      const idx = lines.findLastIndex(l => l.offset <= time)
+      const idx = currentIndexRef.current
 
-      // Loop mode: khi hết dòng hiện tại thì seek lại đầu dòng
-      if (isLoopingRef.current && currentIndexRef.current >= 0) {
-        const current = lines[currentIndexRef.current]
-        const end = current.offset + current.duration
+      if (isLoopingRef.current && idx >= 0) {
+        const line = lines[idx]
+        const end = line.offset + line.duration
         if (time >= end) {
-          playerRef.current.seekTo(current.offset / 1000, true)
+          playerRef.current.seekTo(line.offset / 1000, true)
+          playerRef.current.playVideo()
           return
         }
+        // không cập nhật currentIndex khi đang loop
+        return
       }
 
-      if (idx !== currentIndexRef.current) setCurrentIndex(idx)
+      const newIdx = lines.findLastIndex(l => l.offset <= time)
+      if (newIdx !== idx) setCurrentIndex(newIdx)
     }, 200)
   }
 
@@ -128,6 +131,7 @@ function App() {
       case 's':
         e.preventDefault()
         setIsLooping(prev => !prev)
+        startSync()
         break
     }
   }, [])
