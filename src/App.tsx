@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import YouTube, { type YouTubePlayer } from 'react-youtube'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PenLine, Shuffle, Mic } from 'lucide-react'
+import { PenLine, Shuffle, Mic, Bookmark } from 'lucide-react'
 import { RubyText } from '@/components/RubyText'
 import { DictationMode } from '@/components/DictationMode'
 import { WordOrder } from '@/components/WordOrder'
@@ -22,11 +23,34 @@ function extractVideoId(url: string): string | null {
   return null
 }
 
+function renderFolderTree(
+  folders: { id: number; parent_id: number | null; name: string }[],
+  parentId: number | null,
+  depth: number,
+  onSelect: (id: number) => void
+): React.ReactNode {
+  return folders
+    .filter(f => f.parent_id === parentId)
+    .map(f => (
+      <div key={f.id}>
+        <button
+          onClick={() => onSelect(f.id)}
+          className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-muted transition-colors"
+          style={{ paddingLeft: `${12 + depth * 14}px` }}
+        >
+          {f.name}
+        </button>
+        {renderFolderTree(folders, f.id, depth + 1, onSelect)}
+      </div>
+    ))
+}
+
 function App() {
   const [inputUrl, setInputUrl] = useState('')
   const [videoId, setVideoId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
+  const [videoTitle, setVideoTitle] = useState('')
   const [languages, setLanguages] = useState<Language[]>([])
   const [selectedLang, setSelectedLang] = useState<string>('')
   const [transcript, setTranscript] = useState<TranscriptLine[]>([])
@@ -227,6 +251,43 @@ function App() {
 
   useEffect(() => () => stopSync(), [])
 
+  const [folders, setFolders] = useState<{ id: number; parent_id: number | null; name: string }[]>([])
+  const [showSavePopup, setShowSavePopup] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  async function loadFolders() {
+    const res = await fetch(`${API}/folders`)
+    const json = await res.json() as { folders: { id: number; parent_id: number | null; name: string }[] }
+    setFolders(json.folders)
+  }
+
+  function openSavePopup() {
+    if (!current) return
+    loadFolders()
+    setShowSavePopup(true)
+    setSaveSuccess(false)
+  }
+
+  async function saveSubtitle(folderId?: number) {
+    if (!current || !videoId) return
+    await fetch(`${API}/saved`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folderId: folderId ?? null,
+        videoId,
+        videoTitle,
+        text: current.text,
+        translated: current.translated,
+        lang: selectedLang,
+        offset: current.offset,
+        duration: current.duration,
+      }),
+    })
+    setSaveSuccess(true)
+    setTimeout(() => setShowSavePopup(false), 800)
+  }
+
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
   const isChinese = selectedLang.startsWith('zh')
   const canDictate = !!current
@@ -258,6 +319,9 @@ function App() {
           <span className="text-xl font-bold">LinguaTube</span>
           <Badge variant="secondary">Beta</Badge>
         </div>
+        <Link to="/saved" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          Đã lưu
+        </Link>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 flex flex-col gap-6">
@@ -286,7 +350,7 @@ function App() {
                   opts={{ width: '100%', height: '100%', playerVars: { autoplay: 1 } }}
                   className="w-full h-full"
                   iframeClassName="w-full h-full"
-                  onReady={e => { playerRef.current = e.target }}
+                  onReady={e => { playerRef.current = e.target; setVideoTitle(e.target.getVideoData()?.title ?? '') }}
                   onPlay={() => startSync()}
                   onPause={() => stopSync()}
                   onEnd={() => stopSync()}
@@ -298,9 +362,20 @@ function App() {
 
             {/* Current subtitle / Dictation */}
             <div className="border rounded-lg p-4 bg-card flex flex-col gap-3 min-h-[120px] justify-center relative">
-              {isLooping && !activeMode && (
-                <span className="absolute top-2 right-3 text-xs text-primary font-medium">⟳ Lặp lại</span>
-              )}
+              <div className="absolute top-2 right-3 flex items-center gap-2">
+                {isLooping && !activeMode && (
+                  <span className="text-xs text-primary font-medium">⟳ Lặp lại</span>
+                )}
+                {current && (
+                  <button
+                    onClick={openSavePopup}
+                    title="Lưu phụ đề này"
+                    className="text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Bookmark size={15} />
+                  </button>
+                )}
+              </div>
 
               {canDictate && (
                 <div className="absolute top-2 left-3 flex items-center gap-2">
@@ -459,6 +534,35 @@ function App() {
           </div>
         </div>
       </main>
+
+      {/* Save popup */}
+      {showSavePopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowSavePopup(false)} />
+          <div className="relative bg-card border rounded-xl shadow-xl p-5 w-80 flex flex-col gap-3">
+            {saveSuccess ? (
+              <p className="text-center text-sm text-green-600 font-medium py-2">Đã lưu thành công!</p>
+            ) : (
+              <>
+                <p className="text-sm font-medium">Lưu vào thư mục</p>
+                <div className="flex flex-col gap-0.5 max-h-64 overflow-y-auto">
+                  <button
+                    onClick={() => saveSubtitle(undefined)}
+                    className="text-left px-3 py-2 rounded-lg text-sm hover:bg-muted transition-colors text-muted-foreground"
+                  >
+                    Không phân loại
+                  </button>
+                  {folders.length > 0 && <div className="border-t my-1" />}
+                  {renderFolderTree(folders, null, 0, saveSubtitle)}
+                </div>
+                {folders.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center">Chưa có thư mục nào. Tạo thư mục ở trang Đã lưu.</p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
