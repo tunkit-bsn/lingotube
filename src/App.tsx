@@ -325,6 +325,7 @@ function App() {
                   <div data-dictation>
                     <DictationMode
                       text={current.text}
+                      translation={current.translated}
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}

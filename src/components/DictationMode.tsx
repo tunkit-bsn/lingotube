@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 
 interface Props {
   text: string
+  translation?: string
   isLooping: boolean
   onToggleLoop: () => void
   onReplay: () => void
@@ -23,8 +24,9 @@ function normalize(s: string) {
   return s.toLowerCase().replace(/[^a-z']/g, '')
 }
 
-export function DictationMode({ text, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
+export function DictationMode({ text, translation, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
   const [words, setWords] = useState<WordState[]>([])
+  const [showTranslation, setShowTranslation] = useState(false)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => {
@@ -122,7 +124,16 @@ export function DictationMode({ text, isLooping, onToggleLoop, onReplay, onCompl
         >
           ⟳ {isLooping ? 'Tắt lặp' : 'Lặp lại'}
         </Button>
+        {translation && (
+          <Button size="sm" variant={showTranslation ? 'default' : 'outline'} onClick={() => setShowTranslation(p => !p)}>
+            Dịch
+          </Button>
+        )}
       </div>
+
+      {showTranslation && translation && (
+        <p className="text-center text-sm text-muted-foreground">{translation}</p>
+      )}
 
       {/* Word inputs */}
       <div className="flex flex-wrap gap-x-1.5 gap-y-3 justify-center items-end">
