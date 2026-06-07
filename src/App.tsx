@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PenLine, Shuffle } from 'lucide-react'
+import { PenLine, Shuffle, Mic } from 'lucide-react'
 import { RubyText } from '@/components/RubyText'
 import { DictationMode } from '@/components/DictationMode'
 import { WordOrder } from '@/components/WordOrder'
+import { SpeakingMode } from '@/components/SpeakingMode'
 
 const API = 'http://localhost:3000'
 
@@ -33,6 +34,7 @@ function App() {
   const [isLooping, setIsLooping] = useState(false)
   const [isDictation, setIsDictation] = useState(false)
   const [isWordOrder, setIsWordOrder] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -42,12 +44,14 @@ function App() {
   const isLoopingRef = useRef(false)
   const isDictationRef = useRef(false)
   const isWordOrderRef = useRef(false)
+  const isSpeakingRef = useRef(false)
 
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
   useEffect(() => { isDictationRef.current = isDictation }, [isDictation])
   useEffect(() => { isWordOrderRef.current = isWordOrder }, [isWordOrder])
+  useEffect(() => { isSpeakingRef.current = isSpeaking }, [isSpeaking])
 
   async function handleLoad() {
     const id = extractVideoId(inputUrl.trim())
@@ -95,7 +99,7 @@ function App() {
     const t = playerRef.current.getCurrentTime() * 1000
     let targetMs = t + deltaSeconds * 1000
 
-    if ((isDictationRef.current || isWordOrderRef.current) && idx >= 0) {
+    if ((isDictationRef.current || isWordOrderRef.current || isSpeakingRef.current) && idx >= 0) {
       const line = lines[idx]
       const start = line.offset
       const end = line.offset + line.duration - 50
@@ -125,7 +129,7 @@ function App() {
         return
       }
 
-      if ((isDictationRef.current || isWordOrderRef.current) && idx >= 0) {
+      if ((isDictationRef.current || isWordOrderRef.current || isSpeakingRef.current) && idx >= 0) {
         const line = lines[idx]
         const end = line.offset + line.duration
         if (time >= end) {
@@ -160,7 +164,7 @@ function App() {
 
     const idx = currentIndexRef.current
     const lines = transcriptRef.current
-    const dictation = isDictationRef.current || isWordOrderRef.current
+    const dictation = isDictationRef.current || isWordOrderRef.current || isSpeakingRef.current
 
     switch (e.key) {
       case 'ArrowUp':
@@ -226,7 +230,7 @@ function App() {
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
   const isChinese = selectedLang.startsWith('zh')
   const canDictate = !isChinese && !!current
-  const activeMode = isDictation ? 'dictation' : isWordOrder ? 'wordorder' : null
+  const activeMode = isDictation ? 'dictation' : isWordOrder ? 'wordorder' : isSpeaking ? 'speaking' : null
 
   const keyHints = isDictation
     ? [
@@ -303,7 +307,7 @@ function App() {
                     size="sm"
                     variant={isDictation ? 'default' : 'outline'}
                     className="h-8 text-xs px-3 gap-1.5"
-                    onClick={() => { setIsDictation(p => !p); setIsWordOrder(false) }}
+                    onClick={() => { setIsDictation(p => !p); setIsWordOrder(false); setIsSpeaking(false) }}
                   >
                     <PenLine size={13} />
                     Chép chính tả
@@ -312,10 +316,19 @@ function App() {
                     size="sm"
                     variant={isWordOrder ? 'default' : 'outline'}
                     className="h-8 text-xs px-3 gap-1.5"
-                    onClick={() => { setIsWordOrder(p => !p); setIsDictation(false) }}
+                    onClick={() => { setIsWordOrder(p => !p); setIsDictation(false); setIsSpeaking(false) }}
                   >
                     <Shuffle size={13} />
                     Sắp xếp từ
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isSpeaking ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsSpeaking(p => !p); setIsDictation(false); setIsWordOrder(false) }}
+                  >
+                    <Mic size={13} />
+                    Luyện nói
                   </Button>
                 </div>
               )}
@@ -356,6 +369,16 @@ function App() {
                           if (idx + 1 < lines.length) seekToLine(idx + 1)
                         }, lines[idx].duration + 300)
                       }}
+                    />
+                  </div>
+                ) : isSpeaking && current ? (
+                  <div data-dictation>
+                    <SpeakingMode
+                      text={current.text}
+                      translation={current.translated}
+                      isLooping={isLooping}
+                      onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
+                      onReplay={() => seekToLine(currentIndexRef.current)}
                     />
                   </div>
                 ) : current ? (
