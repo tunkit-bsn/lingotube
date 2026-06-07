@@ -5,6 +5,7 @@ import { Mic, MicOff, Eye, EyeOff, Play } from 'lucide-react'
 interface Props {
   text: string
   translation: string
+  lang: string
   isLooping: boolean
   onToggleLoop: () => void
   onReplay: () => void
@@ -15,27 +16,54 @@ interface WordResult {
   correct: boolean
 }
 
-function normalize(s: string) {
+function isCJK(lang: string) {
+  return lang.startsWith('zh') || lang.startsWith('ja') || lang.startsWith('ko')
+}
+
+function normalizeLatin(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9']/g, '')
 }
 
-function tokenize(text: string): string[] {
+function tokenizeLatin(text: string): string[] {
   return text.match(/[a-zA-Z0-9']+/g) ?? []
 }
 
-function compareWords(original: string, spoken: string): WordResult[] {
-  const origWords = tokenize(original)
-  const spokenWords = tokenize(spoken)
+function tokenizeCJK(text: string): string[] {
+  // split into individual non-space chars (handles hanzi, kana, kanji, hangul)
+  return text.replace(/\s+/g, '').split('')
+}
+
+function compareWords(original: string, spoken: string, lang: string): WordResult[] {
+  if (isCJK(lang)) {
+    const origChars = tokenizeCJK(original)
+    const spokenChars = tokenizeCJK(spoken)
+    return origChars.map((ch, i) => ({
+      word: ch,
+      correct: (spokenChars[i] ?? '') === ch,
+    }))
+  }
+  const origWords = tokenizeLatin(original)
+  const spokenWords = tokenizeLatin(spoken)
   return origWords.map((word, i) => ({
     word,
-    correct: normalize(spokenWords[i] ?? '') === normalize(word),
+    correct: normalizeLatin(spokenWords[i] ?? '') === normalizeLatin(word),
   }))
 }
 
 const SpeechRecognition =
   (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
 
-export function SpeakingMode({ text, translation, isLooping, onToggleLoop, onReplay }: Props) {
+function toSpeechLang(lang: string): string {
+  if (lang.startsWith('zh')) return lang.includes('TW') || lang.includes('HK') ? 'zh-TW' : 'zh-CN'
+  if (lang.startsWith('ja')) return 'ja-JP'
+  if (lang.startsWith('ko')) return 'ko-KR'
+  if (lang.startsWith('fr')) return 'fr-FR'
+  if (lang.startsWith('de')) return 'de-DE'
+  if (lang.startsWith('es')) return 'es-ES'
+  return 'en-US'
+}
+
+export function SpeakingMode({ text, translation, lang, isLooping, onToggleLoop, onReplay }: Props) {
   const [isListening, setIsListening] = useState(false)
   const [results, setResults] = useState<WordResult[] | null>(null)
   const [showOriginal, setShowOriginal] = useState(true)
@@ -91,7 +119,7 @@ export function SpeakingMode({ text, translation, isLooping, onToggleLoop, onRep
     }
 
     const recognition = new SpeechRecognition()
-    recognition.lang = 'en-US'
+    recognition.lang = toSpeechLang(lang)
     recognition.continuous = true
     recognition.interimResults = false
     recognition.maxAlternatives = 1
@@ -112,7 +140,7 @@ export function SpeakingMode({ text, translation, isLooping, onToggleLoop, onRep
         const spoken = spokenPartsRef.current.join(' ').trim()
         if (spoken) {
           setSpokenText(spoken)
-          setResults(compareWords(text, spoken))
+          setResults(compareWords(text, spoken, lang))
         }
         spokenPartsRef.current = []
       }
