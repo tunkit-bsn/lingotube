@@ -9,6 +9,8 @@ interface Props {
   isLooping: boolean
   onToggleLoop: () => void
   onReplay: () => void
+  onMicStart: () => void
+  onMicStop: () => void
 }
 
 interface WordResult {
@@ -63,7 +65,7 @@ function toSpeechLang(lang: string): string {
   return 'en-US'
 }
 
-export function SpeakingMode({ text, translation, lang, isLooping, onToggleLoop, onReplay }: Props) {
+export function SpeakingMode({ text, translation, lang, isLooping, onToggleLoop, onReplay, onMicStart, onMicStop }: Props) {
   const [isListening, setIsListening] = useState(false)
   const [results, setResults] = useState<WordResult[] | null>(null)
   const [showOriginal, setShowOriginal] = useState(true)
@@ -152,9 +154,10 @@ export function SpeakingMode({ text, translation, lang, isLooping, onToggleLoop,
     recognition.start()
     setIsListening(true)
     setResults(null)
+    onMicStart()
   }
 
-  function stopListening(doCheck = false) {
+  function stopListening(doCheck = false, notify = false) {
     shouldCheckRef.current = doCheck
     recognitionRef.current?.stop()
     recognitionRef.current = null
@@ -162,10 +165,11 @@ export function SpeakingMode({ text, translation, lang, isLooping, onToggleLoop,
       mediaRecorderRef.current.stop()
       mediaRecorderRef.current = null
     }
+    if (notify) onMicStop()
   }
 
   function toggleMic() {
-    if (isListening) stopListening(true)
+    if (isListening) stopListening(true, true)
     else startListening()
   }
 

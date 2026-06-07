@@ -229,7 +229,7 @@ function App() {
 
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
   const isChinese = selectedLang.startsWith('zh')
-  const canDictate = !isChinese && !!current
+  const canDictate = !!current
   const canPractice = !!current
   const activeMode = isDictation ? 'dictation' : isWordOrder ? 'wordorder' : isSpeaking ? 'speaking' : null
 
@@ -302,30 +302,26 @@ function App() {
                 <span className="absolute top-2 right-3 text-xs text-primary font-medium">⟳ Lặp lại</span>
               )}
 
-              {canPractice && (
+              {canDictate && (
                 <div className="absolute top-2 left-3 flex items-center gap-2">
-                  {canDictate && (
-                    <Button
-                      size="sm"
-                      variant={isDictation ? 'default' : 'outline'}
-                      className="h-8 text-xs px-3 gap-1.5"
-                      onClick={() => { setIsDictation(p => !p); setIsWordOrder(false); setIsSpeaking(false) }}
-                    >
-                      <PenLine size={13} />
-                      Chép chính tả
-                    </Button>
-                  )}
-                  {canDictate && (
-                    <Button
-                      size="sm"
-                      variant={isWordOrder ? 'default' : 'outline'}
-                      className="h-8 text-xs px-3 gap-1.5"
-                      onClick={() => { setIsWordOrder(p => !p); setIsDictation(false); setIsSpeaking(false) }}
-                    >
-                      <Shuffle size={13} />
-                      Sắp xếp từ
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant={isDictation ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsDictation(p => !p); setIsWordOrder(false); setIsSpeaking(false) }}
+                  >
+                    <PenLine size={13} />
+                    Chép chính tả
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isWordOrder ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsWordOrder(p => !p); setIsDictation(false); setIsSpeaking(false) }}
+                  >
+                    <Shuffle size={13} />
+                    Sắp xếp từ
+                  </Button>
                   <Button
                     size="sm"
                     variant={isSpeaking ? 'default' : 'outline'}
@@ -344,6 +340,7 @@ function App() {
                     <DictationMode
                       text={current.text}
                       translation={current.translated}
+                      lang={selectedLang}
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}
@@ -362,6 +359,7 @@ function App() {
                   <div data-dictation>
                     <WordOrder
                       text={current.text}
+                      lang={selectedLang}
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}
@@ -385,6 +383,8 @@ function App() {
                       isLooping={isLooping}
                       onToggleLoop={() => { setIsLooping(p => !p); startSync() }}
                       onReplay={() => seekToLine(currentIndexRef.current)}
+                      onMicStart={() => playerRef.current?.pauseVideo()}
+                      onMicStop={() => playerRef.current?.playVideo()}
                     />
                   </div>
                 ) : current ? (

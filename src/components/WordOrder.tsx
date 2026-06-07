@@ -3,22 +3,28 @@ import { Button } from '@/components/ui/button'
 
 interface Props {
   text: string
+  lang: string
   isLooping: boolean
   onToggleLoop: () => void
   onReplay: () => void
   onComplete: () => void
 }
 
+function isCJK(lang: string) {
+  return lang.startsWith('zh') || lang.startsWith('ja') || lang.startsWith('ko')
+}
+
 function tokenizeAll(text: string): string[] {
   return text.match(/[a-zA-Z0-9']+|[^a-zA-Z0-9'\s]+/g) ?? []
 }
 
-function tokenizeWords(text: string): string[] {
+function tokenizeWords(text: string, lang: string): string[] {
+  if (isCJK(lang)) return text.replace(/\s+/g, '').split('')
   return text.match(/[a-zA-Z0-9']+/g) ?? []
 }
 
-// Reconstruct full sentence from answer words by reinserting punctuation at original positions
-function reconstruct(answerWords: string[], text: string): string {
+function reconstruct(answerWords: string[], text: string, lang: string): string {
+  if (isCJK(lang)) return answerWords.join('')
   const all = tokenizeAll(text)
   let wi = 0
   return all.map(t => /[a-zA-Z0-9']/.test(t) ? (answerWords[wi++] ?? '') : t).join('')
@@ -35,13 +41,13 @@ function shuffle<T>(arr: T[]): T[] {
 
 interface Token { id: number; word: string }
 
-export function WordOrder({ text, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
+export function WordOrder({ text, lang, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
   const [pool, setPool] = useState<Token[]>([])
   const [answer, setAnswer] = useState<Token[]>([])
   const [result, setResult] = useState<'correct' | 'wrong' | null>(null)
 
   useEffect(() => {
-    const tokens = tokenizeWords(text).map((word, i) => ({ id: i, word }))
+    const tokens = tokenizeWords(text, lang).map((word, i) => ({ id: i, word }))
     setPool(shuffle(tokens))
     setAnswer([])
     setResult(null)
@@ -65,15 +71,16 @@ export function WordOrder({ text, isLooping, onToggleLoop, onReplay, onComplete 
   }
 
   function check(current: Token[]) {
-    const words = tokenizeWords(text)
+    const words = tokenizeWords(text, lang)
     if (current.length < words.length) return
-    const isCorrect = reconstruct(current.map(t => t.word), text) === tokenizeAll(text).join('')
+    const expected = isCJK(lang) ? text.replace(/\s+/g, '') : tokenizeAll(text).join('')
+    const isCorrect = reconstruct(current.map(t => t.word), text, lang) === expected
     setResult(isCorrect ? 'correct' : 'wrong')
     if (isCorrect) setTimeout(onComplete, 800)
   }
 
   function reset() {
-    const tokens = tokenizeWords(text).map((word, i) => ({ id: i, word }))
+    const tokens = tokenizeWords(text, lang).map((word, i) => ({ id: i, word }))
     setPool(shuffle(tokens))
     setAnswer([])
     setResult(null)

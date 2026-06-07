@@ -14,7 +14,14 @@ async function fetchAvailableLanguages(videoId: string): Promise<{ code: string;
   const match = html.match(/"captionTracks":(\[.*?\])/)
   if (!match?.[1]) return []
   const tracks = JSON.parse(match[1]) as { languageCode: string; name: { simpleText: string } }[]
-  return tracks.map(t => ({ code: t.languageCode, name: t.name.simpleText }))
+  const codeCounts = new Map<string, number>()
+  return tracks.map(t => {
+    const name = t.name.simpleText
+    const count = codeCounts.get(t.languageCode) ?? 0
+    codeCounts.set(t.languageCode, count + 1)
+    const code = count === 0 ? t.languageCode : `${t.languageCode}:${count}`
+    return { code, name }
+  })
 }
 
 async function translateBatch(texts: string[], to: string): Promise<string[]> {
@@ -47,7 +54,7 @@ new Elysia()
     }
 
     try {
-      const config = lang ? { lang } : undefined
+      const config = lang ? { lang: lang.split(':')[0] } : undefined
       const transcript = await YoutubeTranscript.fetchTranscript(params.videoId, config)
 
       const texts = transcript.map(l => l.text)

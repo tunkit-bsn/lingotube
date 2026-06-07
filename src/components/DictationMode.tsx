@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 interface Props {
   text: string
   translation?: string
+  lang: string
   isLooping: boolean
   onToggleLoop: () => void
   onReplay: () => void
@@ -16,7 +17,12 @@ interface WordState {
   status: 'idle' | 'correct' | 'wrong' | 'revealed'
 }
 
-function tokenize(text: string): string[] {
+function isCJK(lang: string) {
+  return lang.startsWith('zh') || lang.startsWith('ja') || lang.startsWith('ko')
+}
+
+function tokenize(text: string, lang: string): string[] {
+  if (isCJK(lang)) return text.replace(/\s+/g, '').split('')
   return text.match(/[a-zA-Z']+|[^a-zA-Z'\s]+/g) ?? []
 }
 
@@ -24,28 +30,37 @@ function normalize(s: string) {
   return s.toLowerCase().replace(/[^a-z']/g, '')
 }
 
-export function DictationMode({ text, translation, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
+export function DictationMode({ text, translation, lang, isLooping, onToggleLoop, onReplay, onComplete }: Props) {
   const [words, setWords] = useState<WordState[]>([])
   const [showTranslation, setShowTranslation] = useState(false)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => {
-    const tokens = tokenize(text)
+    const tokens = tokenize(text, lang)
     setWords(tokens.map(w => ({ word: w, value: '', status: 'idle' })))
     inputRefs.current = []
     // focus first word input after render
     setTimeout(() => inputRefs.current[0]?.focus(), 50)
   }, [text])
 
+  const cjk = isCJK(lang)
+
+  function isInputToken(word: string) {
+    return cjk ? true : /[a-zA-Z']/.test(word)
+  }
+
+  function matchWord(value: string, word: string) {
+    return cjk ? value === word : normalize(value) === normalize(word)
+  }
+
   function checkComplete(updated: WordState[]) {
-    const alphaWords = updated.filter(w => /[a-zA-Z']/.test(w.word))
-    const allDone = alphaWords.every(w => w.status !== 'idle')
+    const inputWords = updated.filter(w => isInputToken(w.word))
+    const allDone = inputWords.every(w => w.status !== 'idle')
     if (allDone) setTimeout(onComplete, 600)
   }
 
   function handleChange(i: number, value: string) {
-    const isAlpha = /[a-zA-Z']/.test(words[i].word)
-    if (!isAlpha) return
+    if (!isInputToken(words[i].word)) return
 
     setWords(prev => {
       const next = [...prev]
@@ -53,7 +68,7 @@ export function DictationMode({ text, translation, isLooping, onToggleLoop, onRe
       return next
     })
 
-    if (normalize(value) === normalize(words[i].word)) {
+    if (matchWord(value, words[i].word)) {
       setWords(prev => {
         const next = [...prev]
         next[i] = { ...next[i], value, status: 'correct' }
@@ -93,8 +108,7 @@ export function DictationMode({ text, translation, isLooping, onToggleLoop, onRe
 
   function focusNext(i: number) {
     for (let j = i + 1; j < words.length; j++) {
-      const isAlpha = /[a-zA-Z']/.test(words[j].word)
-      if (isAlpha && words[j].status === 'idle') {
+      if (isInputToken(words[j].word) && words[j].status === 'idle') {
         inputRefs.current[j]?.focus()
         return
       }
@@ -103,7 +117,7 @@ export function DictationMode({ text, translation, isLooping, onToggleLoop, onRe
 
   function focusPrev(i: number) {
     for (let j = i - 1; j >= 0; j--) {
-      if (/[a-zA-Z']/.test(words[j].word)) {
+      if (isInputToken(words[j].word)) {
         inputRefs.current[j]?.focus()
         return
       }
@@ -138,9 +152,7 @@ export function DictationMode({ text, translation, isLooping, onToggleLoop, onRe
       {/* Word inputs */}
       <div className="flex flex-wrap gap-x-1.5 gap-y-3 justify-center items-end">
         {words.map((w, i) => {
-          const isAlpha = /[a-zA-Z']/.test(w.word)
-
-          if (!isAlpha) {
+          if (!isInputToken(w.word)) {
             return (
               <span key={i} className="text-lg text-muted-foreground self-end pb-1">
                 {w.word}
@@ -172,7 +184,7 @@ export function DictationMode({ text, translation, isLooping, onToggleLoop, onRe
                 onChange={e => handleChange(i, e.target.value)}
                 onKeyDown={e => handleKeyDown(i, e)}
                 disabled={w.status === 'correct' || w.status === 'wrong' || w.status === 'revealed'}
-                style={{ width: `${Math.max(w.word.length, 2) + 1}ch` }}
+                style={{ width: cjk ? '2.2ch' : `${Math.max(w.word.length, 2) + 1}ch` }}
                 className={`
                   border-b-2 border-t-0 border-l-0 border-r-0 rounded-none bg-transparent
                   text-center text-base outline-none px-0.5 py-0.5
