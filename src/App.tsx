@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PenLine, Shuffle, Mic, Bookmark } from 'lucide-react'
+import { PenLine, Shuffle, Mic, Bookmark, List } from 'lucide-react'
 import { RubyText } from '@/components/RubyText'
 import { DictationMode } from '@/components/DictationMode'
 import { WordOrder } from '@/components/WordOrder'
@@ -59,6 +59,8 @@ function App() {
   const [isDictation, setIsDictation] = useState(false)
   const [isWordOrder, setIsWordOrder] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isSubtitleList, setIsSubtitleList] = useState(false)
+  const [showTranslation, setShowTranslation] = useState(true)
 
   const playerRef = useRef<YouTubePlayer | null>(null)
   const subtitleRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -245,7 +247,7 @@ function App() {
 
   useEffect(() => {
     if (currentIndex >= 0) {
-      subtitleRefs.current[currentIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      subtitleRefs.current[currentIndex]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [currentIndex])
 
@@ -291,7 +293,6 @@ function App() {
   const current = currentIndex >= 0 ? transcript[currentIndex] : null
   const isChinese = selectedLang.startsWith('zh')
   const canDictate = !!current
-  const canPractice = !!current
   const activeMode = isDictation ? 'dictation' : isWordOrder ? 'wordorder' : isSpeaking ? 'speaking' : null
 
   const keyHints = isDictation
@@ -341,7 +342,7 @@ function App() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Video + subtitle display */}
+          {/* Left: Video + keyboard hints */}
           <div className="lg:col-span-2 flex flex-col gap-4">
             <div className="aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
               {videoId ? (
@@ -352,7 +353,9 @@ function App() {
                   iframeClassName="w-full h-full"
                   onReady={e => { playerRef.current = e.target; setVideoTitle(e.target.getVideoData()?.title ?? '') }}
                   onPlay={() => startSync()}
-                  onPause={() => stopSync()}
+                  onPause={() => {
+                    if (!isDictationRef.current && !isWordOrderRef.current && !isSpeakingRef.current) stopSync()
+                  }}
                   onEnd={() => stopSync()}
                 />
               ) : (
@@ -360,9 +363,84 @@ function App() {
               )}
             </div>
 
-            {/* Current subtitle / Dictation */}
-            <div className="border rounded-lg p-4 bg-card flex flex-col gap-3 min-h-[120px] justify-center relative">
-              <div className="absolute top-2 right-3 flex items-center gap-2">
+            {/* Subtitle bar */}
+            <div className="border rounded-lg px-4 py-2.5 bg-card flex items-center gap-3 min-h-13">
+              <div className="flex-1 flex flex-col gap-0.5 text-center">
+                {current ? (
+                  <>
+                    <p className="text-sm font-medium">{isChinese ? <RubyText text={current.text} /> : current.text}</p>
+                    {showTranslation && current.translated && (
+                      <p className="text-xs text-muted-foreground">{current.translated}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Phụ đề sẽ hiển thị ở đây</p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowTranslation(p => !p)}
+                className={`shrink-0 text-xs px-2 py-1 rounded border transition-colors ${showTranslation ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:bg-muted'}`}
+              >
+                Dịch
+              </button>
+            </div>
+
+            {/* Keyboard hints */}
+            <div className="flex gap-3 justify-center flex-wrap">
+              {keyHints.map(({ key, label, active }) => (
+                <div key={key} className={`flex items-center gap-1.5 text-xs ${active ? 'text-primary' : 'text-muted-foreground'}`}>
+                  <kbd className={`px-1.5 py-0.5 rounded border font-mono text-xs ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted'}`}>{key}</kbd>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Panel */}
+          <div className="border rounded-lg bg-card flex flex-col">
+            {/* Mode buttons */}
+            <div className="px-3 py-2 border-b flex items-center gap-1.5 flex-wrap">
+              <Button
+                size="sm"
+                variant={isSubtitleList ? 'default' : 'outline'}
+                className="h-8 text-xs px-3 gap-1.5"
+                onClick={() => { setIsSubtitleList(p => !p); setIsDictation(false); setIsWordOrder(false); setIsSpeaking(false) }}
+              >
+                <List size={13} />
+                Phụ đề
+              </Button>
+              {canDictate && (
+                <>
+                  <Button
+                    size="sm"
+                    variant={isDictation ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsDictation(p => !p); setIsWordOrder(false); setIsSpeaking(false); setIsSubtitleList(false) }}
+                  >
+                    <PenLine size={13} />
+                    Chép chính tả
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isWordOrder ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsWordOrder(p => !p); setIsDictation(false); setIsSpeaking(false); setIsSubtitleList(false) }}
+                  >
+                    <Shuffle size={13} />
+                    Sắp xếp từ
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isSpeaking ? 'default' : 'outline'}
+                    className="h-8 text-xs px-3 gap-1.5"
+                    onClick={() => { setIsSpeaking(p => !p); setIsDictation(false); setIsWordOrder(false); setIsSubtitleList(false) }}
+                  >
+                    <Mic size={13} />
+                    Luyện nói
+                  </Button>
+                </>
+              )}
+              <div className="ml-auto flex items-center gap-2">
                 {isLooping && !activeMode && (
                   <span className="text-xs text-primary font-medium">⟳ Lặp lại</span>
                 )}
@@ -376,40 +454,54 @@ function App() {
                   </button>
                 )}
               </div>
+            </div>
 
-              {canDictate && (
-                <div className="absolute top-2 left-3 flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={isDictation ? 'default' : 'outline'}
-                    className="h-8 text-xs px-3 gap-1.5"
-                    onClick={() => { setIsDictation(p => !p); setIsWordOrder(false); setIsSpeaking(false) }}
-                  >
-                    <PenLine size={13} />
-                    Chép chính tả
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={isWordOrder ? 'default' : 'outline'}
-                    className="h-8 text-xs px-3 gap-1.5"
-                    onClick={() => { setIsWordOrder(p => !p); setIsDictation(false); setIsSpeaking(false) }}
-                  >
-                    <Shuffle size={13} />
-                    Sắp xếp từ
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={isSpeaking ? 'default' : 'outline'}
-                    className="h-8 text-xs px-3 gap-1.5"
-                    onClick={() => { setIsSpeaking(p => !p); setIsDictation(false); setIsWordOrder(false) }}
-                  >
-                    <Mic size={13} />
-                    Luyện nói
-                  </Button>
+            {/* Content */}
+            {isSubtitleList ? (
+              <>
+                {languages.length > 0 && (
+                  <div className="px-3 py-2 border-b">
+                    <Select value={selectedLang} onValueChange={handleLangChange}>
+                      <SelectTrigger className="h-7 text-xs w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {languages.map(l => (
+                          <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="overflow-y-auto divide-y" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+                  {transcript.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                      {videoId ? 'Đang tải phụ đề...' : 'Tải video để xem phụ đề'}
+                    </div>
+                  ) : transcript.map((line, i) => (
+                    <div
+                      key={i}
+                      ref={el => { subtitleRefs.current[i] = el }}
+                      onClick={() => seekToLine(i)}
+                      className={`px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors ${i === currentIndex ? 'bg-primary/10 border-l-2 border-l-primary' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="text-xs text-muted-foreground mt-0.5 shrink-0">
+                          {Math.floor(line.offset / 60000)}:{String(Math.floor((line.offset % 60000) / 1000)).padStart(2, '0')}
+                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <p className="text-sm">
+                            {isChinese ? <RubyText text={line.text} /> : line.text}
+                          </p>
+                          {line.translated && <p className="text-xs text-muted-foreground">{line.translated}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-
-              <div className={canPractice ? 'mt-6' : ''}>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col justify-center p-4 min-h-50">
                 {isDictation && current ? (
                   <div data-dictation>
                     <DictationMode
@@ -474,63 +566,7 @@ function App() {
                   <p className="text-muted-foreground text-sm text-center">Phụ đề sẽ hiển thị ở đây</p>
                 )}
               </div>
-            </div>
-
-            {/* Keyboard hints */}
-            <div className="flex gap-3 justify-center flex-wrap">
-              {keyHints.map(({ key, label, active }) => (
-                <div key={key} className={`flex items-center gap-1.5 text-xs ${active ? 'text-primary' : 'text-muted-foreground'}`}>
-                  <kbd className={`px-1.5 py-0.5 rounded border font-mono text-xs ${active ? 'border-primary bg-primary/10' : 'border-border bg-muted'}`}>{key}</kbd>
-                  <span>{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Subtitle list */}
-          <div className="border rounded-lg overflow-hidden bg-card flex flex-col">
-            <div className="px-4 py-3 border-b bg-muted/50 flex items-center justify-between gap-2">
-              <span className="text-sm font-medium shrink-0">Phụ đề</span>
-              {languages.length > 0 && (
-                <Select value={selectedLang} onValueChange={handleLangChange}>
-                  <SelectTrigger className="h-7 text-xs w-auto">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {languages.map(l => (
-                      <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="overflow-y-auto flex-1 max-h-[500px] divide-y">
-              {transcript.length === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  {videoId ? 'Đang tải phụ đề...' : 'Tải video để xem phụ đề'}
-                </div>
-              ) : transcript.map((line, i) => (
-                <div
-                  key={i}
-                  ref={el => { subtitleRefs.current[i] = el }}
-                  onClick={() => seekToLine(i)}
-                  className={`px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors ${i === currentIndex ? 'bg-primary/10 border-l-2 border-l-primary' : ''}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="text-xs text-muted-foreground mt-0.5 shrink-0">
-                      {Math.floor(line.offset / 60000)}:{String(Math.floor((line.offset % 60000) / 1000)).padStart(2, '0')}
-                    </span>
-                    <div className="flex flex-col gap-0.5">
-                      <p className="text-sm">
-                        {isChinese ? <RubyText text={line.text} /> : line.text}
-                      </p>
-                      {line.translated && <p className="text-xs text-muted-foreground">{line.translated}</p>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            )}
           </div>
         </div>
       </main>
